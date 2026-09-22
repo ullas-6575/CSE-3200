@@ -27,7 +27,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Allow access to the camera to take a photo.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Allow access to the photo library to upload an image.</string>
+	<string>This app requires access to the photo library to select images for text extraction.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

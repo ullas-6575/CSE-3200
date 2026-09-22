@@ -20,18 +20,21 @@ class _HomePageState extends State<HomePage> {
   bool _isProcessing = false;
 
   Future<void> _pickImage(ImageSource source) async {
-    final XFile? image = await _picker.pickImage(source: source);
-    if (image == null) return;
-
-    final Uint8List bytes = await image.readAsBytes();
-    if (!mounted) return;
-    setState(() {
-      _imageBytes = bytes;
-      _isProcessing = true;
-    });
-
     try {
-      final String extractedText = await _ocrService.extractText(bytes);
+      final XFile? image = await _picker.pickImage(source: source);
+      if (image == null) return;
+
+      final Uint8List bytes = await image.readAsBytes();
+      if (!mounted) return;
+      setState(() {
+        _imageBytes = bytes;
+        _isProcessing = true;
+      });
+
+      final String extractedText = await _ocrService.extractText(
+        bytes,
+        imagePath: image.path,
+      );
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute(
@@ -46,15 +49,26 @@ class _HomePageState extends State<HomePage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(error.message)),
       );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not open image: $error')),
+      );
     } finally {
       if (mounted) setState(() => _isProcessing = false);
     }
   }
 
   @override
+  void dispose() {
+    _ocrService.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Image Picker')),
+      appBar: AppBar(title: const Text('Scan an image')),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -96,7 +110,7 @@ class _HomePageState extends State<HomePage> {
               onPressed:
                   _isProcessing ? null : () => _pickImage(ImageSource.camera),
               icon: const Icon(Icons.camera_alt_outlined),
-              label: const Text('Take Image'),
+              label: const Text('Capture with camera'),
               style: FilledButton.styleFrom(
                 minimumSize: const Size.fromHeight(52),
               ),
@@ -106,7 +120,7 @@ class _HomePageState extends State<HomePage> {
               onPressed:
                   _isProcessing ? null : () => _pickImage(ImageSource.gallery),
               icon: const Icon(Icons.upload_outlined),
-              label: const Text('Upload Image'),
+              label: const Text('Choose from files'),
               style: OutlinedButton.styleFrom(
                 minimumSize: const Size.fromHeight(52),
               ),

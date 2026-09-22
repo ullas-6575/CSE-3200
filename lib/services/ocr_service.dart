@@ -1,7 +1,11 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+
 class OcrService {
+  TextRecognizer? _textRecognizer;
+
   // Change this when the virtual environment's Python executable is elsewhere.
   // Example: --dart-define=TROCR_PYTHON=/full/path/to/backend/.venv/bin/python
   static const String _pythonExecutable = String.fromEnvironment(
@@ -15,11 +19,24 @@ class OcrService {
     defaultValue: 'backend/main.py',
   );
 
-  Future<String> extractText(Uint8List imageBytes) async {
+  Future<String> extractText(Uint8List imageBytes, {String? imagePath}) async {
+    if (Platform.isAndroid || Platform.isIOS) {
+      if (imagePath == null) {
+        throw const OcrException('The selected image could not be opened.');
+      }
+      try {
+        final TextRecognizer recognizer = _textRecognizer ??= TextRecognizer();
+        final RecognizedText result = await recognizer.processImage(
+          InputImage.fromFilePath(imagePath),
+        );
+        return result.text;
+      } catch (error) {
+        throw OcrException('Could not read text from the image: $error');
+      }
+    }
+
     if (!Platform.isWindows && !Platform.isLinux && !Platform.isMacOS) {
-      throw const OcrException(
-        'Local Python OCR is available only in the desktop app.',
-      );
+      throw const OcrException('OCR is not supported on this platform.');
     }
 
     final File script = File(_scriptPath);
@@ -60,6 +77,11 @@ class OcrService {
     } finally {
       if (await imageFile.exists()) await imageFile.delete();
     }
+  }
+
+  Future<void> dispose() async {
+    await _textRecognizer?.close();
+    _textRecognizer = null;
   }
 }
 
