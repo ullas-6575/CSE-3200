@@ -1,43 +1,64 @@
-import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:http/http.dart' as http;
-
 class OcrService {
-  OcrService({http.Client? client}) : _client = client ?? http.Client();
-
-  // Override this at launch with --dart-define, for example:
-  // --dart-define=OCR_ENDPOINT=http://192.168.1.10:8000/ocr
-  static const String _endpointUrl = String.fromEnvironment(
-    'OCR_ENDPOINT',
-    defaultValue: 'http://localhost:8000/ocr',
+  // Change this when the virtual environment's Python executable is elsewhere.
+  // Example: --dart-define=TROCR_PYTHON=/full/path/to/backend/.venv/bin/python
+  static const String _pythonExecutable = String.fromEnvironment(
+    'TROCR_PYTHON',
+    defaultValue: 'python',
   );
-  final http.Client _client;
+
+  // This path is relative to the Flutter project's working directory.
+  static const String _scriptPath = String.fromEnvironment(
+    'TROCR_SCRIPT',
+    defaultValue: 'backend/main.py',
+  );
 
   Future<String> extractText(Uint8List imageBytes) async {
-    try {
-      final request = http.MultipartRequest('POST', Uri.parse(_endpointUrl))
-        ..files.add(
-          http.MultipartFile.fromBytes(
-            'file',
-            imageBytes,
-            filename: 'captured-image.jpg',
-          ),
-        );
-      final response = await _client.send(request);
-      final body = await http.Response.fromStream(response);
-      final Map<String, dynamic> data = jsonDecode(body.body);
+    if (!Platform.isWindows && !Platform.isLinux && !Platform.isMacOS) {
+      throw const OcrException(
+        'Local Python OCR is available only in the desktop app.',
+      );
+    }
 
-      if (body.statusCode != 200) {
-        throw OcrException(data['detail'] as String? ?? 'OCR failed.');
+    final File script = File(_scriptPath);
+    if (!await script.exists()) {
+      throw const OcrException(
+        'Cannot find $_scriptPath. Run the desktop app from the project folder '
+        'or set TROCR_SCRIPT.',
+      );
+    }
+
+    final File imageFile = File(
+      '${Directory.systemTemp.path}${Platform.pathSeparator}'
+      'trocr-${DateTime.now().microsecondsSinceEpoch}.jpg',
+    );
+
+    try {
+      await imageFile.writeAsBytes(imageBytes, flush: true);
+      final ProcessResult result = await Process.run(
+        _pythonExecutable,
+        <String>[script.path, imageFile.path],
+        runInShell: Platform.isWindows,
+      );
+
+      if (result.exitCode != 0) {
+        final String details = result.stderr.toString().trim();
+        throw OcrException(
+          details.isEmpty ? 'Local TrOCR failed.' : details,
+        );
       }
-      return data['text'] as String? ?? '';
+
+      return result.stdout.toString().trim();
     } on OcrException {
       rethrow;
-    } catch (_) {
+    } on ProcessException {
       throw const OcrException(
-        'Cannot reach the OCR server. Start the Python server on port 8000.',
+        'Cannot start $_pythonExecutable. Install Python or set TROCR_PYTHON.',
       );
+    } finally {
+      if (await imageFile.exists()) await imageFile.delete();
     }
   }
 }

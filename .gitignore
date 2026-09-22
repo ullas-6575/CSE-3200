@@ -4,6 +4,7 @@
 *.pyc
 *.swp
 .venv/
+backend/models/
 .DS_Store
 .atom/
 .buildlog/
